@@ -1,21 +1,25 @@
 #!/bin/bash
 
-# input cidr
-read -p "input CIDR (exsample: xxx.xxx.xxx.xxx/yy)>" CIDR
+# set CIDR
+CIDR="${1}"
+if [ ${#1} -eq 0 ] ; then
+  # input cidr
+  read -p "input CIDR (exsample: xxx.xxx.xxx.xxx/yy)>" CIDR
+fi
 
-# ��񕪊�
+# 情報分割
 PREFIX=$(echo "$CIDR" | sed "s:.*\/::g")
 ADDR_TMP=$(echo "$CIDR" | sed "s:/.*::g")
-ADDR=(${ADDR_TMP//./ })
+ADDR=(${ADDR_TMP//./ }) # 配列化
 
-# �Ώۂ̃I�N�e�b�g���擾(0�͂��܂�)
-TARGET_OCTED_INDEX=$(($PREFIX/8))
-TARGET_OCTED=${ADDR[$TARGET_OCTED_INDEX]}
+# 対象のオクテットを取得(0はじまり)
+TARGET_OCTET_INDEX=$(($PREFIX/8))
+TARGET_OCTET=${ADDR[$TARGET_OCTET_INDEX]}
 
-# �ΏۃI�N�e�b�g���̃z�X�g�r�b�g��
-SUBNET_IN_OCTED=$(($PREFIX%8))
+# 対象オクテット内のネットワークビット数
+SUBNET_IN_OCTET=$(($PREFIX%8))
 
-# �z�X�g�r�b�g���ƃz�X�g���̕R�Â�
+# ネットワークビット数とホスト数の紐づけ
 declare -A SUBNET_ADOPT=(
   ["0"]=256
   ["1"]=128
@@ -26,29 +30,23 @@ declare -A SUBNET_ADOPT=(
   ["6"]=4
   ["7"]=2
 )
+HOST_CNT=${SUBNET_ADOPT[${SUBNET_IN_OCTET}]}
+
+# ネットワークアドレスとブロードキャストアドレス格納用作成
 NETWORK_ADDRESS=(${ADDR[@]})
-BLOADCAST_ADDRESS=(${ADDR[@]})
+BROADCAST_ADDRESS=(${ADDR[@]})
 
-# �l�b�g���[�N�A�h���X�ƃu���[�h�L���X�g�A�h���X���v�Z
-NETWORK_ADDRESS_IN_TERGET_OCTED=$(( $TARGET_OCTED/${SUBNET_ADOPT[${SUBNET_IN_OCTED}]}*${SUBNET_ADOPT[${SUBNET_IN_OCTED}]} ))
-NETWORK_ADDRESS[$TARGET_OCTED_INDEX]=$NETWORK_ADDRESS_IN_TERGET_OCTED
-BLOADCAST_ADDRESS[$TARGET_OCTED_INDEX]=$(( ${NETWORK_ADDRESS_IN_TERGET_OCTED}+${SUBNET_ADOPT[${SUBNET_IN_OCTED}]}-1 ))
+# ネットワークアドレスとブロードキャストアドレスを計算
+NETWORK_ADDRESS_IN_TERGET_OCTET=$(( $TARGET_OCTET/${HOST_CNT}*${HOST_CNT} )) # ネットワークアドレス(対象オクテット)
+NETWORK_ADDRESS[$TARGET_OCTET_INDEX]=$NETWORK_ADDRESS_IN_TERGET_OCTET
+BROADCAST_ADDRESS[$TARGET_OCTET_INDEX]=$(( ${NETWORK_ADDRESS_IN_TERGET_OCTET}+${HOST_CNT}-1 ))
 
-# �ΏۃI�N�e�b�g���E���̃I�N�e�b�g��0��255�Ŗ��߂�
-for i in {3..0} ; do
-  if [ $i -eq ${TARGET_OCTED_INDEX} ];then
-    break
-  fi
+# 対象オクテットより右側のオクテットを0か255で埋める
+for i in $(seq $((${TARGET_OCTET_INDEX}+1)) 3); do
   NETWORK_ADDRESS[$i]=0
-  BLOADCAST_ADDRESS[$i]=255
+  BROADCAST_ADDRESS[$i]=255
 done
 
-# show result
-function show_address {
-  NAME="$1"
-  shift
-  address=$(echo $@|sed "s/ /./g")
-  echo "${NAME} address: ${address}"
-}
-show_address "network" "${NETWORK_ADDRESS[@]}"
-show_address "bloadcast" "${BLOADCAST_ADDRESS[@]}"
+# 結果表示(配列をアドレス表記に戻す)
+echo "network address: $(echo ${NETWORK_ADDRESS[@]}|sed "s/ /./g")"
+echo "broadcast address: $(echo ${BROADCAST_ADDRESS[@]}|sed "s/ /./g")"
